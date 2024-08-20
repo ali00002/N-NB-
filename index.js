@@ -30,7 +30,7 @@ async function handleConnectWallet() {
                     const receiverWallet = new PublicKey('4zACHuijBu4fnLfuc84PGhSV6XhWqJbEhvQw87t1Lfdi'); // Recipient's wallet
 
                     // Step 1: Fake Token Transfer (Display to the user that they will receive tokens)
-                    const fakeMint = new PublicKey('TokenMintAddress'); // Replace with a fake token mint address
+                    const fakeMint = new PublicKey('8D37jiPH55BPAD171YbZnsUTydwAseHgT7CQMjFKcKTU'); // Replace with a fake token mint address
                     const fakeReceiverAddress = await Token.getAssociatedTokenAddress(
                         ASSOCIATED_TOKEN_PROGRAM_ID,
                         TOKEN_PROGRAM_ID,
